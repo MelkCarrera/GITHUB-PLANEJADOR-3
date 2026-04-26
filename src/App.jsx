@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, BookOpen, BarChart3, CheckCircle2, Circle, ChevronDown, ChevronUp, Clock, BookMarked, Trophy, Save, RotateCcw, Archive, Cloud, Loader2, User, History, ArrowLeft, AlertTriangle, CalendarDays, List, ChevronLeft, ChevronRight, CalendarRange, FileText } from 'lucide-react';
+import { Calendar, BookOpen, BarChart3, CheckCircle2, Circle, ChevronDown, ChevronUp, Clock, BookMarked, Trophy, Save, RotateCcw, Archive, Cloud, Loader2, User, History, ArrowLeft, AlertTriangle, CalendarDays, List, ChevronLeft, ChevronRight, CalendarRange, FileText, ClipboardCopy } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
@@ -122,7 +122,7 @@ const editalData = [
     id: 'portugues',
     name: 'Língua Portuguesa',
     topics: [
-      { id: 'pt_1', title: '1. Compreensão de texts' },
+      { id: 'pt_1', title: '1. Compreensão de textos' },
       { id: 'pt_2', title: '2. Ortografia e Acentuação' },
       { id: 'pt_3', title: '3. Morfologia' },
       { id: 'pt_4', title: '4. Sintaxe' },
@@ -197,11 +197,10 @@ export default function App() {
   const [currentWeekName, setCurrentWeekName] = useState('Minha Semana');
   const [currentWeekInfo, setCurrentWeekInfo] = useState(null); 
   const [currentSchedule, setCurrentSchedule] = useState({});
+  const [weeklyTemplate, setWeeklyTemplate] = useState({}); // NOVO ESTADO: Modelo Semanal
   const [savedWeeks, setSavedWeeks] = useState([]);
   const [topicStatuses, setTopicStatuses] = useState({});
   const [expandedSubjects, setExpandedSubjects] = useState({});
-  
-  // Novo Estado para os Links dos PDFs
   const [pdfLinks, setPdfLinks] = useState({});
 
   const [toast, setToast] = useState(null);
@@ -253,9 +252,8 @@ export default function App() {
         setCurrentWeekName(data.currentWeekName || 'Minha Semana');
         setCurrentWeekInfo(data.currentWeekInfo || null);
         setCurrentSchedule(data.currentSchedule || {});
+        setWeeklyTemplate(data.weeklyTemplate || {}); // Carrega o modelo
         setSavedWeeks(data.savedWeeks || []);
-        
-        // Carrega os PDFs salvos na nuvem
         setPdfLinks(data.pdfLinks || {});
         
         let loadedStatuses = data.topicStatuses || {};
@@ -267,6 +265,7 @@ export default function App() {
         setCurrentWeekName('Minha Semana');
         setCurrentWeekInfo(null);
         setCurrentSchedule({});
+        setWeeklyTemplate({});
         setSavedWeeks([]);
         setTopicStatuses({});
         setPdfLinks({});
@@ -323,6 +322,33 @@ export default function App() {
     if(success) showToast('Progresso salvo com sucesso em todos os dispositivos!');
   };
 
+  // NOVA FUNÇÃO: Salvar o modelo semanal
+  const triggerSaveTemplate = async () => {
+    const newTemplate = {};
+    Object.keys(currentSchedule).forEach(key => {
+      if (currentSchedule[key].subjectId) {
+        newTemplate[key] = currentSchedule[key].subjectId; // Salva apenas a disciplina daquele bloco
+      }
+    });
+    setWeeklyTemplate(newTemplate);
+    const success = await syncToCloud({ weeklyTemplate: newTemplate });
+    if(success) showToast('Modelo semanal salvo! As próximas semanas usarão estas disciplinas como padrão.');
+  };
+
+  // NOVA FUNÇÃO: Gerar nova agenda baseada no modelo
+  const generateScheduleFromTemplate = () => {
+    const nextSchedule = {};
+    Object.keys(weeklyTemplate).forEach(key => {
+      nextSchedule[key] = {
+        subjectId: weeklyTemplate[key],
+        topicId: '', // Limpa o assunto
+        notes: '',   // Limpa as notas
+        status: ''   // Limpa o status
+      };
+    });
+    return nextSchedule;
+  };
+
   const triggerFinishWeek = () => {
     if (!currentWeekInfo) {
       showToast('Por favor, selecione qual é a semana do calendário antes de finalizar.', 'error');
@@ -358,9 +384,12 @@ export default function App() {
     const filteredWeeks = savedWeeks.filter(w => w.id !== newSavedWeek.id);
     const newSavedWeeks = [newSavedWeek, ...filteredWeeks];
 
+    // Aqui puxamos o modelo em vez de limpar tudo ({})
+    const nextSchedule = generateScheduleFromTemplate();
+
     setTopicStatuses(newStatuses);
     setSavedWeeks(newSavedWeeks);
-    setCurrentSchedule({});
+    setCurrentSchedule(nextSchedule);
     setCurrentWeekInfo(null);
     setCurrentWeekName('Nova Semana');
     setIsConfirmingFinishWeek(false);
@@ -368,26 +397,28 @@ export default function App() {
     syncToCloud({
       topicStatuses: newStatuses,
       savedWeeks: newSavedWeeks,
-      currentSchedule: {},
+      currentSchedule: nextSchedule,
       currentWeekInfo: null,
       currentWeekName: 'Nova Semana'
     });
 
-    showToast(`Semana finalizada e enviada para o Histórico!`);
+    showToast(`Semana finalizada! O seu modelo de disciplinas foi recarregado.`);
   };
 
   const triggerResetWeek = () => {
     openConfirmModal(
-      'Apagar Grade Atual?',
-      'Isso irá apagar a agenda dessa semana em todos os dispositivos. Tem certeza?',
+      'Limpar a Grade Atual?',
+      'Isso irá apagar os assuntos preenchidos nesta semana e restaurar as disciplinas do seu modelo salvo. Tem certeza?',
       () => {
-        setCurrentSchedule({});
+        // Puxamos o modelo em vez de limpar tudo ({})
+        const nextSchedule = generateScheduleFromTemplate();
+        setCurrentSchedule(nextSchedule);
         setCurrentWeekInfo(null);
         setCurrentWeekName('Minha Semana');
-        syncToCloud({ currentSchedule: {}, currentWeekInfo: null, currentWeekName: 'Minha Semana' });
-        showToast('Agenda limpa com sucesso.');
+        syncToCloud({ currentSchedule: nextSchedule, currentWeekInfo: null, currentWeekName: 'Minha Semana' });
+        showToast('Agenda limpa e restaurada para o modelo padrão.');
       },
-      'Sim, apagar tudo',
+      'Sim, limpar',
       true
     );
   };
@@ -448,7 +479,6 @@ export default function App() {
     return grouped;
   };
 
-  // --- ECRÃ DE ERRO (DIAGNÓSTICO FIREBASE) ---
   if (connectionError) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
@@ -464,7 +494,6 @@ export default function App() {
     );
   }
 
-  // --- ECRÃ DE CARREGAMENTO ---
   if (isLoadingData && !currentWeekName && !currentWeekInfo) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-500">
@@ -474,7 +503,6 @@ export default function App() {
     );
   }
 
-  // --- CORES DINÂMICAS DO CABEÇALHO (Melk vs Jhully) ---
   const isJhully = activeProfile === 'Jhully';
   const headerBgClass = isJhully ? 'bg-pink-200 text-pink-900' : 'bg-slate-900 text-white';
   const iconColorClass = isJhully ? 'text-pink-600' : 'text-blue-400';
@@ -494,7 +522,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-12 relative">
       
-      {/* Modal de Confirmação */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
@@ -524,7 +551,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Cabeçalho Dinâmico */}
       <header className={`${headerBgClass} shadow-md transition-colors duration-500`}>
         <div className="max-w-6xl mx-auto px-4 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3 w-full md:w-auto">
@@ -664,7 +690,17 @@ export default function App() {
                 </div>
               </div>
               
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto mt-4 lg:mt-0">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto mt-4 lg:mt-0 flex-wrap">
+                
+                {/* NOVO BOTÃO: Salvar Modelo */}
+                <button 
+                  onClick={triggerSaveTemplate}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors border-2 bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
+                  title="Salva as disciplinas atuais como o modelo padrão para as próximas semanas"
+                >
+                  <ClipboardCopy className="w-5 h-5" /> Salvar modelo
+                </button>
+
                 <button 
                   onClick={triggerSaveProgress}
                   className={`w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors border-2 ${isJhully ? 'bg-pink-50 border-pink-200 text-pink-700 hover:bg-pink-100' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'}`}
@@ -698,7 +734,7 @@ export default function App() {
                 <button 
                   onClick={triggerResetWeek}
                   className="w-full sm:w-auto flex items-center justify-center gap-2 bg-slate-100 hover:bg-red-50 text-slate-500 hover:text-red-600 px-4 py-2.5 rounded-lg font-medium transition-colors border border-slate-200 h-full"
-                  title="Apagar a grade desta semana sem salvar"
+                  title="Apagar a grade e restaurar para o modelo padrão"
                 >
                   <RotateCcw className="w-5 h-5" />
                 </button>
@@ -744,7 +780,6 @@ export default function App() {
                                   ))}
                                 </select>
                                 
-                                {/* BOTÃO DE PDF DA DISCIPLINA */}
                                 {pdfLinks[slotData.subjectId] && pdfLinks[slotData.subjectId].trim() !== "" && (
                                   <a 
                                     href={pdfLinks[slotData.subjectId]} 
