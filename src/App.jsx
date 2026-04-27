@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, BookOpen, BarChart3, CheckCircle2, Circle, ChevronDown, ChevronUp, Clock, BookMarked, Trophy, Save, RotateCcw, Archive, Cloud, Loader2, User, History, ArrowLeft, AlertTriangle, CalendarDays, List, ChevronLeft, ChevronRight, CalendarRange, FileText, ClipboardCopy } from 'lucide-react';
+import { Calendar, BookOpen, BarChart3, CheckCircle2, Circle, ChevronDown, ChevronUp, Clock, BookMarked, Trophy, Save, RotateCcw, Archive, Cloud, Loader2, User, History, ArrowLeft, AlertTriangle, CalendarDays, List, ChevronLeft, ChevronRight, CalendarRange, FileText, ClipboardCopy, Plus, Settings } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
@@ -186,9 +186,57 @@ const getMonthWeeks = (year, month) => {
   return weeks;
 };
 
+// --- CONFIGURAÇÃO DE TEMAS ---
+const getThemeConfig = (themeName) => {
+  switch(themeName) {
+    case 'pink': return {
+      headerBg: 'bg-pink-200 text-pink-900', icon: 'text-pink-600', subtitle: 'text-pink-700',
+      syncText: 'text-pink-600', syncedText: 'text-emerald-600', progressBg: 'bg-pink-100 border-pink-300',
+      progressLabel: 'text-pink-600', progressValue: 'text-pink-800', progressTrack: 'bg-pink-300', progressFill: 'bg-pink-500',
+      tabActive: 'bg-white text-pink-900', tabInactive: 'text-pink-700 hover:bg-pink-300/50',
+      btnPrimary: 'bg-pink-600 hover:bg-pink-700 text-white', btnSecondary: 'bg-pink-50 border-pink-200 text-pink-700 hover:bg-pink-100',
+      profileActive: 'bg-pink-500 text-white ring-2 ring-pink-50 scale-105 z-10', profileInactive: 'bg-pink-100/30 text-pink-800 hover:bg-pink-200/50',
+      weekBtn: 'bg-pink-100 text-pink-800 border-pink-300'
+    };
+    case 'emerald': return {
+      headerBg: 'bg-emerald-200 text-emerald-900', icon: 'text-emerald-600', subtitle: 'text-emerald-700',
+      syncText: 'text-emerald-600', syncedText: 'text-emerald-800', progressBg: 'bg-emerald-100 border-emerald-300',
+      progressLabel: 'text-emerald-600', progressValue: 'text-emerald-800', progressTrack: 'bg-emerald-300', progressFill: 'bg-emerald-500',
+      tabActive: 'bg-white text-emerald-900', tabInactive: 'text-emerald-700 hover:bg-emerald-300/50',
+      btnPrimary: 'bg-emerald-600 hover:bg-emerald-700 text-white', btnSecondary: 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100',
+      profileActive: 'bg-emerald-600 text-white ring-2 ring-emerald-50 scale-105 z-10', profileInactive: 'bg-emerald-100/30 text-emerald-800 hover:bg-emerald-200/50',
+      weekBtn: 'bg-emerald-100 text-emerald-800 border-emerald-300'
+    };
+    case 'purple': return {
+      headerBg: 'bg-purple-900 text-white', icon: 'text-purple-400', subtitle: 'text-purple-300',
+      syncText: 'text-purple-300', syncedText: 'text-emerald-400', progressBg: 'bg-purple-800 border-purple-700',
+      progressLabel: 'text-purple-300', progressValue: 'text-purple-100', progressTrack: 'bg-purple-700', progressFill: 'bg-purple-400',
+      tabActive: 'bg-white text-purple-900', tabInactive: 'text-purple-300 hover:bg-purple-800/50',
+      btnPrimary: 'bg-purple-600 hover:bg-purple-700 text-white', btnSecondary: 'bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100',
+      profileActive: 'bg-purple-600 text-white ring-2 ring-white scale-105 z-10', profileInactive: 'bg-purple-800/50 text-purple-100 hover:bg-purple-700/50',
+      weekBtn: 'bg-purple-100 text-purple-800 border-purple-300'
+    };
+    default: // 'blue' (Melk default)
+      return {
+      headerBg: 'bg-slate-900 text-white', icon: 'text-blue-400', subtitle: 'text-slate-400',
+      syncText: 'text-blue-300', syncedText: 'text-green-400', progressBg: 'bg-slate-800 border-slate-700',
+      progressLabel: 'text-slate-400', progressValue: 'text-blue-400', progressTrack: 'bg-slate-700', progressFill: 'bg-blue-500',
+      tabActive: 'bg-white text-slate-900', tabInactive: 'text-slate-300 hover:bg-slate-800',
+      btnPrimary: 'bg-blue-600 hover:bg-blue-700 text-white', btnSecondary: 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100',
+      profileActive: 'bg-blue-600 text-white ring-2 ring-white scale-105 z-10', profileInactive: 'bg-blue-900/40 text-blue-100 hover:bg-blue-800',
+      weekBtn: 'bg-blue-100 text-blue-800 border-blue-300'
+    };
+  }
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('agenda'); 
   const [activeProfile, setActiveProfile] = useState('Melk');
+  
+  // SISTEMA DE PERFIS GLOBAIS
+  const [profiles, setProfiles] = useState([]);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [editingProfileData, setEditingProfileData] = useState({ id: '', name: '', theme: 'blue' });
 
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -197,7 +245,7 @@ export default function App() {
   const [currentWeekName, setCurrentWeekName] = useState('Minha Semana');
   const [currentWeekInfo, setCurrentWeekInfo] = useState(null); 
   const [currentSchedule, setCurrentSchedule] = useState({});
-  const [weeklyTemplate, setWeeklyTemplate] = useState({}); // NOVO ESTADO: Modelo Semanal
+  const [weeklyTemplate, setWeeklyTemplate] = useState({});
   const [savedWeeks, setSavedWeeks] = useState([]);
   const [topicStatuses, setTopicStatuses] = useState({});
   const [expandedSubjects, setExpandedSubjects] = useState({});
@@ -240,6 +288,26 @@ export default function App() {
     signInAnonymously(auth).catch(e => console.log("Auth opcional falhou:", e));
   }, []);
 
+  // CARREGAR LISTA GLOBAL DE PERFIS
+  useEffect(() => {
+    const configRef = doc(db, 'dados_planejador', '_config_global_');
+    const unsub = onSnapshot(configRef, (snap) => {
+      if (snap.exists() && snap.data().profiles) {
+         setProfiles(snap.data().profiles);
+      } else {
+         // Perfis padrão iniciais se for a primeira vez
+         const defaultProfiles = [
+           { id: 'Melk', name: 'Melk', theme: 'blue' },
+           { id: 'Jhully', name: 'Jhully', theme: 'pink' }
+         ];
+         setDoc(configRef, { profiles: defaultProfiles }, { merge: true });
+         setProfiles(defaultProfiles);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // CARREGAR DADOS DO PERFIL ATIVO
   useEffect(() => {
     setIsLoadingData(true);
     setConnectionError(null);
@@ -252,7 +320,7 @@ export default function App() {
         setCurrentWeekName(data.currentWeekName || 'Minha Semana');
         setCurrentWeekInfo(data.currentWeekInfo || null);
         setCurrentSchedule(data.currentSchedule || {});
-        setWeeklyTemplate(data.weeklyTemplate || {}); // Carrega o modelo
+        setWeeklyTemplate(data.weeklyTemplate || {});
         setSavedWeeks(data.savedWeeks || []);
         setPdfLinks(data.pdfLinks || {});
         
@@ -295,6 +363,40 @@ export default function App() {
     }
   };
 
+  const saveProfileSettings = async () => {
+    if (!editingProfileData.name.trim()) {
+      showToast('O nome do perfil não pode estar vazio.', 'error');
+      return;
+    }
+    let updatedProfiles = [...profiles];
+    let profileIdToActivate = activeProfile;
+
+    if (editingProfileData.id) {
+        // Atualiza existente
+        updatedProfiles = updatedProfiles.map(p => p.id === editingProfileData.id ? editingProfileData : p);
+    } else {
+        // Cria novo
+        const newId = 'user_' + Date.now();
+        updatedProfiles.push({ ...editingProfileData, id: newId });
+        profileIdToActivate = newId;
+    }
+    
+    await setDoc(doc(db, 'dados_planejador', '_config_global_'), { profiles: updatedProfiles }, { merge: true });
+    setActiveProfile(profileIdToActivate);
+    setIsProfileModalOpen(false);
+    showToast('Perfil salvo com sucesso!');
+  };
+
+  const deleteProfile = () => {
+    openConfirmModal('Deletar Perfil?', `Tem certeza que deseja deletar o perfil "${editingProfileData.name}"? Os dados de estudos serão perdidos.`, async () => {
+        const updatedProfiles = profiles.filter(p => p.id !== editingProfileData.id);
+        await setDoc(doc(db, 'dados_planejador', '_config_global_'), { profiles: updatedProfiles }, { merge: true });
+        setActiveProfile(updatedProfiles[0]?.id || '');
+        setIsProfileModalOpen(false);
+        showToast('Perfil deletado.');
+    }, 'Sim, deletar', true);
+  };
+
   const handleWeekNameBlur = () => { syncToCloud({ currentWeekName }); };
 
   const selectWeekRange = (weekObj) => {
@@ -322,12 +424,11 @@ export default function App() {
     if(success) showToast('Progresso salvo com sucesso em todos os dispositivos!');
   };
 
-  // NOVA FUNÇÃO: Salvar o modelo semanal
   const triggerSaveTemplate = async () => {
     const newTemplate = {};
     Object.keys(currentSchedule).forEach(key => {
       if (currentSchedule[key].subjectId) {
-        newTemplate[key] = currentSchedule[key].subjectId; // Salva apenas a disciplina daquele bloco
+        newTemplate[key] = currentSchedule[key].subjectId; 
       }
     });
     setWeeklyTemplate(newTemplate);
@@ -335,15 +436,14 @@ export default function App() {
     if(success) showToast('Modelo semanal salvo! As próximas semanas usarão estas disciplinas como padrão.');
   };
 
-  // NOVA FUNÇÃO: Gerar nova agenda baseada no modelo
   const generateScheduleFromTemplate = () => {
     const nextSchedule = {};
     Object.keys(weeklyTemplate).forEach(key => {
       nextSchedule[key] = {
         subjectId: weeklyTemplate[key],
-        topicId: '', // Limpa o assunto
-        notes: '',   // Limpa as notas
-        status: ''   // Limpa o status
+        topicId: '', 
+        notes: '',   
+        status: ''   
       };
     });
     return nextSchedule;
@@ -384,7 +484,6 @@ export default function App() {
     const filteredWeeks = savedWeeks.filter(w => w.id !== newSavedWeek.id);
     const newSavedWeeks = [newSavedWeek, ...filteredWeeks];
 
-    // Aqui puxamos o modelo em vez de limpar tudo ({})
     const nextSchedule = generateScheduleFromTemplate();
 
     setTopicStatuses(newStatuses);
@@ -410,7 +509,6 @@ export default function App() {
       'Limpar a Grade Atual?',
       'Isso irá apagar os assuntos preenchidos nesta semana e restaurar as disciplinas do seu modelo salvo. Tem certeza?',
       () => {
-        // Puxamos o modelo em vez de limpar tudo ({})
         const nextSchedule = generateScheduleFromTemplate();
         setCurrentSchedule(nextSchedule);
         setCurrentWeekInfo(null);
@@ -461,13 +559,6 @@ export default function App() {
     return { totalTopics, totalCompleted, overallPercentage, bySubject };
   }, [topicStatuses]);
 
-  const getTopicAndSubjectName = (subjectId, topicId) => {
-    const subject = editalData.find(s => s.id === subjectId);
-    if (!subject) return { subjectName: 'Desconhecido', topicName: '' };
-    const topic = subject.topics.find(t => t.id === topicId);
-    return { subjectName: subject.name, topicName: topic ? topic.title : 'Assunto não selecionado' };
-  };
-
   const groupScheduleBySubject = (schedule) => {
     const grouped = {};
     Object.values(schedule).forEach(slot => {
@@ -494,38 +585,19 @@ export default function App() {
     );
   }
 
-  if (isLoadingData && !currentWeekName && !currentWeekInfo) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center text-slate-500">
-        <Loader2 className="w-12 h-12 animate-spin text-blue-500 mb-4" />
-        <p className="font-medium">A sincronizar globalmente o perfil de {activeProfile}...</p>
-      </div>
-    );
-  }
-
-  const isJhully = activeProfile === 'Jhully';
-  const headerBgClass = isJhully ? 'bg-pink-200 text-pink-900' : 'bg-slate-900 text-white';
-  const iconColorClass = isJhully ? 'text-pink-600' : 'text-blue-400';
-  const subtitleColorClass = isJhully ? 'text-pink-700' : 'text-slate-400';
-  const syncTextColorClass = isJhully ? 'text-pink-600' : 'text-blue-300';
-  const syncedTextColorClass = isJhully ? 'text-emerald-600' : 'text-green-400';
-  const progressBgClass = isJhully ? 'bg-pink-100 border-pink-300' : 'bg-slate-800 border-slate-700';
-  const progressLabelClass = isJhully ? 'text-pink-600' : 'text-slate-400';
-  const progressValueClass = isJhully ? 'text-pink-800' : 'text-blue-400';
-  const progressTrackClass = isJhully ? 'bg-pink-300' : 'bg-slate-700';
-  const progressFillClass = isJhully ? 'bg-pink-500' : 'bg-blue-500';
-  const tabActiveClass = isJhully ? 'bg-white text-pink-900' : 'bg-white text-slate-900';
-  const tabInactiveClass = isJhully ? 'text-pink-700 hover:bg-pink-300/50' : 'text-slate-300 hover:bg-slate-800';
-
+  // --- APLICAÇÃO DO TEMA DINÂMICO ---
+  const activeProfileData = profiles.find(p => p.id === activeProfile) || { name: 'Carregando...', theme: 'blue' };
+  const theme = getThemeConfig(activeProfileData.theme);
   const weeksToDisplay = getMonthWeeks(navYear, navMonth);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-12 relative">
       
+      {/* MODAL DE CONFIRMAÇÃO GERAL */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className={`p-6 text-white flex items-center gap-3 ${confirmModal.isDestructive ? 'bg-red-600' : (isJhully ? 'bg-pink-500' : 'bg-blue-600')}`}>
+            <div className={`p-6 text-white flex items-center gap-3 ${confirmModal.isDestructive ? 'bg-red-600' : theme.btnPrimary.split(' ')[0]}`}>
               <AlertTriangle className="w-6 h-6" />
               <h3 className="text-xl font-bold">{confirmModal.title}</h3>
             </div>
@@ -544,6 +616,57 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL DE CONFIGURAÇÃO DE PERFIL */}
+      {isProfileModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className={`p-6 text-white flex items-center gap-3 ${theme.btnPrimary.split(' ')[0]}`}>
+              <Settings className="w-6 h-6" />
+              <h3 className="text-xl font-bold">{editingProfileData.id ? 'Configurar Perfil' : 'Criar Novo Perfil'}</h3>
+            </div>
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Nome do Perfil</label>
+                <input 
+                  type="text" 
+                  value={editingProfileData.name}
+                  onChange={(e) => setEditingProfileData({...editingProfileData, name: e.target.value})}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-400 bg-slate-50 text-slate-800"
+                  placeholder="Ex: João Silva"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-3">Cor do Tema</label>
+                <div className="flex gap-4">
+                  <button onClick={() => setEditingProfileData({...editingProfileData, theme: 'blue'})} className={`w-10 h-10 rounded-full bg-blue-500 hover:scale-110 transition-transform ${editingProfileData.theme === 'blue' ? 'ring-4 ring-offset-2 ring-blue-500' : ''}`} title="Azul" />
+                  <button onClick={() => setEditingProfileData({...editingProfileData, theme: 'pink'})} className={`w-10 h-10 rounded-full bg-pink-500 hover:scale-110 transition-transform ${editingProfileData.theme === 'pink' ? 'ring-4 ring-offset-2 ring-pink-500' : ''}`} title="Rosa" />
+                  <button onClick={() => setEditingProfileData({...editingProfileData, theme: 'emerald'})} className={`w-10 h-10 rounded-full bg-emerald-500 hover:scale-110 transition-transform ${editingProfileData.theme === 'emerald' ? 'ring-4 ring-offset-2 ring-emerald-500' : ''}`} title="Esmeralda" />
+                  <button onClick={() => setEditingProfileData({...editingProfileData, theme: 'purple'})} className={`w-10 h-10 rounded-full bg-purple-500 hover:scale-110 transition-transform ${editingProfileData.theme === 'purple' ? 'ring-4 ring-offset-2 ring-purple-500' : ''}`} title="Roxo" />
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center mt-8 pt-4 border-t border-slate-100">
+                {editingProfileData.id && profiles.length > 1 ? (
+                  <button onClick={deleteProfile} className="text-red-500 hover:text-red-700 text-sm font-bold px-2 py-1">
+                    Deletar Perfil
+                  </button>
+                ) : <div />}
+                
+                <div className="flex gap-3">
+                  <button onClick={() => setIsProfileModalOpen(false)} className="px-5 py-2.5 rounded-lg font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors">
+                    Cancelar
+                  </button>
+                  <button onClick={saveProfileSettings} className={`px-5 py-2.5 rounded-lg font-bold transition-colors ${theme.btnPrimary}`}>
+                    Salvar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg border flex items-center gap-3 animate-in fade-in slide-in-from-top-5 ${toast.type === 'error' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-green-50 border-green-200 text-green-800'}`}>
           {toast.type === 'success' && <CheckCircle2 className="w-5 h-5" />}
@@ -551,70 +674,109 @@ export default function App() {
         </div>
       )}
 
-      <header className={`${headerBgClass} shadow-md transition-colors duration-500`}>
+      {/* CABEÇALHO COM TEMA DINÂMICO */}
+      <header className={`${theme.headerBg} shadow-md transition-colors duration-500`}>
         <div className="max-w-6xl mx-auto px-4 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3 w-full md:w-auto">
-            <BookMarked className={`w-8 h-8 ${iconColorClass}`} />
+            <BookMarked className={`w-8 h-8 ${theme.icon}`} />
             <div>
               <h1 className="text-2xl font-bold tracking-tight">PCPA Escrivão</h1>
-              <div className={`flex items-center gap-2 text-sm ${subtitleColorClass}`}>
-                Painel de Estudos - {activeProfile}
+              <div className={`flex items-center gap-2 text-sm ${theme.subtitle}`}>
+                Painel de Estudos - {activeProfileData.name}
                 <span>•</span>
                 {isSyncing ? (
-                  <span className={`flex items-center gap-1 ${syncTextColorClass}`}><Loader2 className="w-3 h-3 animate-spin" /> Guardando...</span>
+                  <span className={`flex items-center gap-1 ${theme.syncText}`}><Loader2 className="w-3 h-3 animate-spin" /> Guardando...</span>
                 ) : (
-                  <span className={`flex items-center gap-1 ${syncedTextColorClass}`}><Cloud className="w-3 h-3" /> Sincronizado</span>
+                  <span className={`flex items-center gap-1 ${theme.syncedText}`}><Cloud className="w-3 h-3" /> Sincronizado</span>
                 )}
               </div>
             </div>
           </div>
           
-          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6 w-full md:w-auto">
-            <div className="flex items-center gap-2 p-1.5 rounded-full bg-black/10">
-              <button
-                onClick={() => { setActiveProfile('Melk'); handleTabChange('agenda'); setViewingHistoryWeek(null); }}
-                className={`flex items-center gap-1 px-5 py-1.5 rounded-full font-bold text-sm transition-all shadow-sm ${activeProfile === 'Melk' ? 'bg-blue-600 text-white ring-2 ring-white scale-105 z-10' : 'bg-blue-900/40 text-blue-100 hover:bg-blue-800'}`}
+          <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6 w-full md:w-auto overflow-hidden">
+            
+            {/* SELETOR DINÂMICO DE PERFIS */}
+            <div className="flex items-center gap-2 p-1.5 rounded-full bg-black/10 overflow-x-auto max-w-[90vw] md:max-w-md no-scrollbar">
+              {profiles.map(p => {
+                const isActive = activeProfile === p.id;
+                const pTheme = getThemeConfig(p.theme);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => { setActiveProfile(p.id); handleTabChange('agenda'); setViewingHistoryWeek(null); }}
+                    className={`flex items-center gap-1 px-4 py-1.5 rounded-full font-bold text-sm transition-all shadow-sm whitespace-nowrap ${isActive ? pTheme.profileActive : pTheme.profileInactive}`}
+                  >
+                    <User className="w-4 h-4" /> {p.name}
+                  </button>
+                )
+              })}
+              
+              <button 
+                onClick={() => {
+                  setEditingProfileData({ id: '', name: '', theme: 'blue' });
+                  setIsProfileModalOpen(true);
+                }} 
+                className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors ml-1 shrink-0" 
+                title="Criar Novo Perfil"
               >
-                <User className="w-4 h-4" /> Melk
+                <Plus className="w-4 h-4" />
               </button>
-              <button
-                onClick={() => { setActiveProfile('Jhully'); handleTabChange('agenda'); setViewingHistoryWeek(null); }}
-                className={`flex items-center gap-1 px-5 py-1.5 rounded-full font-bold text-sm transition-all shadow-sm ${activeProfile === 'Jhully' ? 'bg-pink-400 text-white ring-2 ring-white scale-105 z-10' : 'bg-pink-100/30 text-pink-700 hover:bg-pink-200/50'}`}
-              >
-                <User className="w-4 h-4" /> Jhully
-              </button>
+              
+              {activeProfile && (
+                <button 
+                  onClick={() => {
+                    const currentP = profiles.find(p => p.id === activeProfile);
+                    if(currentP) {
+                        setEditingProfileData(currentP);
+                        setIsProfileModalOpen(true);
+                    }
+                  }} 
+                  className="p-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors shrink-0" 
+                  title="Configurar Perfil Atual"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
-            <div className={`hidden lg:flex items-center gap-4 px-4 py-2 rounded-lg border ${progressBgClass}`}>
+            <div className={`hidden lg:flex items-center gap-4 px-4 py-2 rounded-lg border ${theme.progressBg}`}>
               <div className="text-right">
-                <p className={`text-xs uppercase tracking-wider font-bold ${progressLabelClass}`}>Progresso Edital</p>
-                <p className={`font-bold text-lg ${progressValueClass}`}>{progressStats.overallPercentage}%</p>
+                <p className={`text-xs uppercase tracking-wider font-bold ${theme.progressLabel}`}>Progresso Edital</p>
+                <p className={`font-bold text-lg ${theme.progressValue}`}>{progressStats.overallPercentage}%</p>
               </div>
-              <div className={`w-24 h-2 rounded-full overflow-hidden ${progressTrackClass}`}>
-                <div className={`h-full transition-all duration-1000 ${progressFillClass}`} style={{ width: `${progressStats.overallPercentage}%` }} />
+              <div className={`w-24 h-2 rounded-full overflow-hidden ${theme.progressTrack}`}>
+                <div className={`h-full transition-all duration-1000 ${theme.progressFill}`} style={{ width: `${progressStats.overallPercentage}%` }} />
               </div>
             </div>
           </div>
         </div>
         
         <div className="max-w-6xl mx-auto px-4 flex gap-1 mt-2 overflow-x-auto">
-          <button onClick={() => { handleTabChange('agenda'); setViewingHistoryWeek(null); }} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'agenda' ? tabActiveClass : tabInactiveClass}`}>
-            <Calendar className="w-5 h-5" /> Agenda de {activeProfile}
+          <button onClick={() => { handleTabChange('agenda'); setViewingHistoryWeek(null); }} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'agenda' ? theme.tabActive : theme.tabInactive}`}>
+            <Calendar className="w-5 h-5" /> Agenda
           </button>
-          <button onClick={() => { handleTabChange('historico'); setViewingHistoryWeek(null); }} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'historico' ? tabActiveClass : tabInactiveClass}`}>
+          <button onClick={() => { handleTabChange('historico'); setViewingHistoryWeek(null); }} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'historico' ? theme.tabActive : theme.tabInactive}`}>
             <History className="w-5 h-5" /> Histórico
           </button>
-          <button onClick={() => handleTabChange('edital')} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'edital' ? tabActiveClass : tabInactiveClass}`}>
+          <button onClick={() => handleTabChange('edital')} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'edital' ? theme.tabActive : theme.tabInactive}`}>
             <BookOpen className="w-5 h-5" /> Controle do Edital
           </button>
-          <button onClick={() => handleTabChange('pdfs')} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'pdfs' ? tabActiveClass : tabInactiveClass}`}>
+          <button onClick={() => handleTabChange('pdfs')} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'pdfs' ? theme.tabActive : theme.tabInactive}`}>
             <FileText className="w-5 h-5" /> PDFs
           </button>
-          <button onClick={() => handleTabChange('progresso')} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'progresso' ? tabActiveClass : tabInactiveClass}`}>
-            <BarChart3 className="w-5 h-5" /> Painel de Progresso
+          <button onClick={() => handleTabChange('progresso')} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'progresso' ? theme.tabActive : theme.tabInactive}`}>
+            <BarChart3 className="w-5 h-5" /> Painel
           </button>
         </div>
       </header>
+
+      {/* TELA DE CARREGAMENTO */}
+      {isLoadingData && !currentWeekName && !currentWeekInfo && (
+        <div className="absolute inset-0 bg-slate-50/80 z-50 flex flex-col items-center justify-center text-slate-500 backdrop-blur-sm">
+          <Loader2 className="w-12 h-12 animate-spin text-blue-500 mb-4" />
+          <p className="font-medium">A carregar perfil de {activeProfileData.name}...</p>
+        </div>
+      )}
 
       <main className="max-w-6xl mx-auto px-4 py-8">
         
@@ -630,9 +792,7 @@ export default function App() {
                     <button 
                       onClick={() => setIsWeekSelectorOpen(!isWeekSelectorOpen)}
                       className={`flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-colors border-2 ${
-                        currentWeekInfo 
-                          ? (isJhully ? 'bg-pink-100 text-pink-800 border-pink-300' : 'bg-blue-100 text-blue-800 border-blue-300')
-                          : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                        currentWeekInfo ? theme.weekBtn : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
                       }`}
                     >
                       <CalendarRange className="w-5 h-5" />
@@ -671,9 +831,7 @@ export default function App() {
                               key={week.id}
                               onClick={() => selectWeekRange(week)}
                               className={`w-full text-left p-3 rounded-lg flex items-center justify-between transition-colors border ${
-                                isSelected 
-                                  ? (isJhully ? 'bg-pink-100 border-pink-300 text-pink-900' : 'bg-blue-100 border-blue-300 text-blue-900') 
-                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                                isSelected ? theme.weekBtn : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
                               }`}
                             >
                               <div>
@@ -692,7 +850,6 @@ export default function App() {
               
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 w-full lg:w-auto mt-4 lg:mt-0 flex-wrap">
                 
-                {/* NOVO BOTÃO: Salvar Modelo */}
                 <button 
                   onClick={triggerSaveTemplate}
                   className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors border-2 bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
@@ -703,7 +860,7 @@ export default function App() {
 
                 <button 
                   onClick={triggerSaveProgress}
-                  className={`w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors border-2 ${isJhully ? 'bg-pink-50 border-pink-200 text-pink-700 hover:bg-pink-100' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'}`}
+                  className={`w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium transition-colors border-2 ${theme.btnSecondary}`}
                 >
                   <Save className="w-5 h-5" /> Salvar progresso
                 </button>
@@ -1167,7 +1324,7 @@ export default function App() {
                           const success = await syncToCloud({ pdfLinks: pdfLinks });
                           if(success) showToast(`Link de ${subject.name} salvo com sucesso!`);
                         }}
-                        className="px-4 py-2 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold rounded-lg text-sm transition-colors whitespace-nowrap shadow-sm"
+                        className={`px-4 py-2 font-bold rounded-lg text-sm transition-colors whitespace-nowrap shadow-sm ${theme.btnPrimary}`}
                       >
                         Salvar
                       </button>
