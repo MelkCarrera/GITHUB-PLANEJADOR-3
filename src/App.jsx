@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Calendar, BookOpen, BarChart3, CheckCircle2, Circle, ChevronDown, ChevronUp, Clock, BookMarked, Trophy, Save, RotateCcw, Archive, Cloud, Loader2, User, History, ArrowLeft, AlertTriangle, CalendarDays, List, ChevronLeft, ChevronRight, CalendarRange, FileText, ClipboardCopy, Plus, Settings } from 'lucide-react';
+import { Calendar, BookOpen, BarChart3, CheckCircle2, Circle, ChevronDown, ChevronUp, Clock, BookMarked, Trophy, Save, RotateCcw, Archive, Cloud, Loader2, User, History, ArrowLeft, AlertTriangle, CalendarDays, List, ChevronLeft, ChevronRight, CalendarRange, FileText, ClipboardCopy, Plus, Settings, Timer } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
@@ -216,7 +216,7 @@ const getThemeConfig = (themeName) => {
       profileActive: 'bg-purple-600 text-white ring-2 ring-white scale-105 z-10', profileInactive: 'bg-purple-800/50 text-purple-100 hover:bg-purple-700/50',
       weekBtn: 'bg-purple-100 text-purple-800 border-purple-300'
     };
-    default: // 'blue' (Melk default)
+    default: // 'blue'
       return {
       headerBg: 'bg-slate-900 text-white', icon: 'text-blue-400', subtitle: 'text-slate-400',
       syncText: 'text-blue-300', syncedText: 'text-green-400', progressBg: 'bg-slate-800 border-slate-700',
@@ -233,7 +233,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('agenda'); 
   const [activeProfile, setActiveProfile] = useState('Melk');
   
-  // SISTEMA DE PERFIS GLOBAIS
   const [profiles, setProfiles] = useState([]);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [editingProfileData, setEditingProfileData] = useState({ id: '', name: '', theme: 'blue' });
@@ -245,6 +244,8 @@ export default function App() {
   const [currentWeekName, setCurrentWeekName] = useState('Minha Semana');
   const [currentWeekInfo, setCurrentWeekInfo] = useState(null); 
   const [currentSchedule, setCurrentSchedule] = useState({});
+  const [currentWeekHours, setCurrentWeekHours] = useState({}); // NOVO ESTADO: Horas diárias da semana atual
+  
   const [weeklyTemplate, setWeeklyTemplate] = useState({});
   const [savedWeeks, setSavedWeeks] = useState([]);
   const [topicStatuses, setTopicStatuses] = useState({});
@@ -288,14 +289,12 @@ export default function App() {
     signInAnonymously(auth).catch(e => console.log("Auth opcional falhou:", e));
   }, []);
 
-  // CARREGAR LISTA GLOBAL DE PERFIS
   useEffect(() => {
     const configRef = doc(db, 'dados_planejador', '_config_global_');
     const unsub = onSnapshot(configRef, (snap) => {
       if (snap.exists() && snap.data().profiles) {
          setProfiles(snap.data().profiles);
       } else {
-         // Perfis padrão iniciais se for a primeira vez
          const defaultProfiles = [
            { id: 'Melk', name: 'Melk', theme: 'blue' },
            { id: 'Jhully', name: 'Jhully', theme: 'pink' }
@@ -307,7 +306,6 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  // CARREGAR DADOS DO PERFIL ATIVO
   useEffect(() => {
     setIsLoadingData(true);
     setConnectionError(null);
@@ -320,6 +318,7 @@ export default function App() {
         setCurrentWeekName(data.currentWeekName || 'Minha Semana');
         setCurrentWeekInfo(data.currentWeekInfo || null);
         setCurrentSchedule(data.currentSchedule || {});
+        setCurrentWeekHours(data.currentWeekHours || {}); // Carrega horas
         setWeeklyTemplate(data.weeklyTemplate || {});
         setSavedWeeks(data.savedWeeks || []);
         setPdfLinks(data.pdfLinks || {});
@@ -333,6 +332,7 @@ export default function App() {
         setCurrentWeekName('Minha Semana');
         setCurrentWeekInfo(null);
         setCurrentSchedule({});
+        setCurrentWeekHours({});
         setWeeklyTemplate({});
         setSavedWeeks([]);
         setTopicStatuses({});
@@ -372,10 +372,8 @@ export default function App() {
     let profileIdToActivate = activeProfile;
 
     if (editingProfileData.id) {
-        // Atualiza existente
         updatedProfiles = updatedProfiles.map(p => p.id === editingProfileData.id ? editingProfileData : p);
     } else {
-        // Cria novo
         const newId = 'user_' + Date.now();
         updatedProfiles.push({ ...editingProfileData, id: newId });
         profileIdToActivate = newId;
@@ -419,8 +417,24 @@ export default function App() {
     syncToCloud({ currentSchedule: newSchedule });
   };
 
+  // NOVA FUNÇÃO: Atualizar horas do dia
+  const updateDailyHours = (day, field, value) => {
+    let val = parseInt(value, 10);
+    if (isNaN(val)) val = 0;
+    if (field === 'h' && val > 24) val = 24;
+    if (field === 'm' && val > 59) val = 59;
+    if (val < 0) val = 0;
+
+    const newHours = { ...currentWeekHours };
+    if (!newHours[day]) newHours[day] = { h: 0, m: 0 };
+    newHours[day][field] = val;
+
+    setCurrentWeekHours(newHours);
+    syncToCloud({ currentWeekHours: newHours });
+  };
+
   const triggerSaveProgress = async () => {
-    const success = await syncToCloud({ currentSchedule, currentWeekName, currentWeekInfo });
+    const success = await syncToCloud({ currentSchedule, currentWeekName, currentWeekInfo, currentWeekHours });
     if(success) showToast('Progresso salvo com sucesso em todos os dispositivos!');
   };
 
@@ -473,11 +487,13 @@ export default function App() {
       }
     });
     
+    // Salva a semana atual e guarda também as horas (weekHours)
     const newSavedWeek = {
       id: currentWeekInfo ? currentWeekInfo.id : Date.now(),
       name: currentWeekName,
       weekInfo: currentWeekInfo,
       schedule: currentSchedule,
+      weekHours: currentWeekHours, // Guarda o histórico de tempo
       dateSaved: new Date().toLocaleDateString()
     };
     
@@ -489,6 +505,7 @@ export default function App() {
     setTopicStatuses(newStatuses);
     setSavedWeeks(newSavedWeeks);
     setCurrentSchedule(nextSchedule);
+    setCurrentWeekHours({}); // Zera as horas para a nova semana
     setCurrentWeekInfo(null);
     setCurrentWeekName('Nova Semana');
     setIsConfirmingFinishWeek(false);
@@ -497,23 +514,25 @@ export default function App() {
       topicStatuses: newStatuses,
       savedWeeks: newSavedWeeks,
       currentSchedule: nextSchedule,
+      currentWeekHours: {},
       currentWeekInfo: null,
       currentWeekName: 'Nova Semana'
     });
 
-    showToast(`Semana finalizada! O seu modelo de disciplinas foi recarregado.`);
+    showToast(`Semana finalizada! O seu histórico e as suas horas foram guardados.`);
   };
 
   const triggerResetWeek = () => {
     openConfirmModal(
       'Limpar a Grade Atual?',
-      'Isso irá apagar os assuntos preenchidos nesta semana e restaurar as disciplinas do seu modelo salvo. Tem certeza?',
+      'Isso irá apagar os assuntos e as HORAS preenchidas nesta semana, restaurando para o modelo salvo. Tem certeza?',
       () => {
         const nextSchedule = generateScheduleFromTemplate();
         setCurrentSchedule(nextSchedule);
+        setCurrentWeekHours({});
         setCurrentWeekInfo(null);
         setCurrentWeekName('Minha Semana');
-        syncToCloud({ currentSchedule: nextSchedule, currentWeekInfo: null, currentWeekName: 'Minha Semana' });
+        syncToCloud({ currentSchedule: nextSchedule, currentWeekHours: {}, currentWeekInfo: null, currentWeekName: 'Minha Semana' });
         showToast('Agenda limpa e restaurada para o modelo padrão.');
       },
       'Sim, limpar',
@@ -559,6 +578,44 @@ export default function App() {
     return { totalTopics, totalCompleted, overallPercentage, bySubject };
   }, [topicStatuses]);
 
+  // CÁLCULO DAS HORAS DE ESTUDO
+  const hoursStats = useMemo(() => {
+    let totalMinutes = 0;
+    
+    // Soma da semana atual
+    Object.values(currentWeekHours).forEach(day => {
+        totalMinutes += (day.h || 0) * 60 + (day.m || 0);
+    });
+    
+    // Soma do histórico (Semanas salvas)
+    const weeklyData = [];
+    savedWeeks.forEach(week => {
+        let weekMins = 0;
+        if (week.weekHours) {
+            Object.values(week.weekHours).forEach(day => {
+                weekMins += (day.h || 0) * 60 + (day.m || 0);
+            });
+        }
+        totalMinutes += weekMins;
+        
+        if (weekMins > 0) {
+          weeklyData.push({
+              id: week.id,
+              name: week.name,
+              label: week.weekInfo ? `Semana ${week.weekInfo.weekNum} de ${MESES[week.weekInfo.month]}` : 'Semana s/ data',
+              minutes: weekMins,
+              hoursStr: `${Math.floor(weekMins/60)}h ${weekMins%60}m`
+          });
+        }
+    });
+
+    return {
+        totalHours: Math.floor(totalMinutes / 60),
+        totalMinsRemainder: totalMinutes % 60,
+        weeklyData
+    };
+  }, [currentWeekHours, savedWeeks]);
+
   const groupScheduleBySubject = (schedule) => {
     const grouped = {};
     Object.values(schedule).forEach(slot => {
@@ -585,7 +642,6 @@ export default function App() {
     );
   }
 
-  // --- APLICAÇÃO DO TEMA DINÂMICO ---
   const activeProfileData = profiles.find(p => p.id === activeProfile) || { name: 'Carregando...', theme: 'blue' };
   const theme = getThemeConfig(activeProfileData.theme);
   const weeksToDisplay = getMonthWeeks(navYear, navMonth);
@@ -593,7 +649,6 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-12 relative">
       
-      {/* MODAL DE CONFIRMAÇÃO GERAL */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
@@ -616,7 +671,6 @@ export default function App() {
         </div>
       )}
 
-      {/* MODAL DE CONFIGURAÇÃO DE PERFIL */}
       {isProfileModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
@@ -674,7 +728,6 @@ export default function App() {
         </div>
       )}
 
-      {/* CABEÇALHO COM TEMA DINÂMICO */}
       <header className={`${theme.headerBg} shadow-md transition-colors duration-500`}>
         <div className="max-w-6xl mx-auto px-4 py-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3 w-full md:w-auto">
@@ -695,7 +748,6 @@ export default function App() {
           
           <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6 w-full md:w-auto overflow-hidden">
             
-            {/* SELETOR DINÂMICO DE PERFIS */}
             <div className="flex items-center gap-2 p-1.5 rounded-full bg-black/10 overflow-x-auto max-w-[90vw] md:max-w-md no-scrollbar">
               {profiles.map(p => {
                 const isActive = activeProfile === p.id;
@@ -755,6 +807,9 @@ export default function App() {
           <button onClick={() => { handleTabChange('agenda'); setViewingHistoryWeek(null); }} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'agenda' ? theme.tabActive : theme.tabInactive}`}>
             <Calendar className="w-5 h-5" /> Agenda
           </button>
+          <button onClick={() => { handleTabChange('horas'); setViewingHistoryWeek(null); }} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'horas' ? theme.tabActive : theme.tabInactive}`}>
+            <Timer className="w-5 h-5" /> Horas
+          </button>
           <button onClick={() => { handleTabChange('historico'); setViewingHistoryWeek(null); }} className={`flex items-center gap-2 px-5 py-3 font-medium rounded-t-lg transition-colors whitespace-nowrap ${activeTab === 'historico' ? theme.tabActive : theme.tabInactive}`}>
             <History className="w-5 h-5" /> Histórico
           </button>
@@ -770,7 +825,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* TELA DE CARREGAMENTO */}
       {isLoadingData && !currentWeekName && !currentWeekInfo && (
         <div className="absolute inset-0 bg-slate-50/80 z-50 flex flex-col items-center justify-center text-slate-500 backdrop-blur-sm">
           <Loader2 className="w-12 h-12 animate-spin text-blue-500 mb-4" />
@@ -904,7 +958,32 @@ export default function App() {
                   <tr className="bg-slate-100 text-slate-600 uppercase text-[10px] md:text-xs font-bold tracking-wider">
                     <th className="p-2 md:p-3 border-b border-slate-200 w-12 md:w-16 text-center sticky left-0 bg-slate-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Horário</th>
                     {DIAS_SEMANA.map(dia => (
-                      <th key={dia} className="p-2 md:p-3 border-b border-slate-200 w-[14%] text-center">{dia}</th>
+                      <th key={dia} className="p-2 md:p-3 border-b border-slate-200 w-[14%] text-center align-top">
+                        <div className="font-bold">{dia}</div>
+                        {/* NOVOS CAMPOS DE HORAS */}
+                        <div className="flex items-center justify-center gap-0.5 mt-2 flex-wrap sm:flex-nowrap">
+                          <input
+                            type="number"
+                            min="0" max="24"
+                            value={currentWeekHours[dia]?.h === 0 && !currentWeekHours[dia]?.m ? '' : currentWeekHours[dia]?.h || ''}
+                            onChange={(e) => updateDailyHours(dia, 'h', e.target.value)}
+                            className="w-7 sm:w-8 p-0.5 text-center text-[10px] border border-slate-300 rounded focus:ring-1 focus:ring-indigo-400 focus:outline-none bg-white font-normal"
+                            placeholder="0"
+                            title="Horas"
+                          />
+                          <span className="text-[9px] text-slate-400 font-normal mr-1">h</span>
+                          <input
+                            type="number"
+                            min="0" max="59"
+                            value={currentWeekHours[dia]?.m === 0 && !currentWeekHours[dia]?.h ? '' : currentWeekHours[dia]?.m || ''}
+                            onChange={(e) => updateDailyHours(dia, 'm', e.target.value)}
+                            className="w-7 sm:w-8 p-0.5 text-center text-[10px] border border-slate-300 rounded focus:ring-1 focus:ring-indigo-400 focus:outline-none bg-white font-normal"
+                            placeholder="0"
+                            title="Minutos"
+                          />
+                          <span className="text-[9px] text-slate-400 font-normal">m</span>
+                        </div>
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -991,6 +1070,78 @@ export default function App() {
           </div>
         )}
 
+        {/* --- ABA: HORAS DE ESTUDO (NOVA) --- */}
+        {activeTab === 'horas' && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-slate-800">Controle de Horas</h2>
+              <p className="text-slate-500 text-sm mt-1">Acompanhe o seu tempo total de dedicação aos estudos.</p>
+            </div>
+
+            <div className="bg-gradient-to-r from-slate-900 to-indigo-900 rounded-2xl shadow-lg p-8 mb-8 text-white relative overflow-hidden">
+              <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex items-center gap-6">
+                  <div className="p-5 bg-white/10 rounded-full border border-white/20">
+                    <Timer className="w-12 h-12 text-indigo-300" />
+                  </div>
+                  <div>
+                    <h3 className="text-indigo-200 text-sm font-bold uppercase tracking-wider mb-1">Tempo Total Estudado</h3>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-5xl font-extrabold">{hoursStats.totalHours}</span><span className="text-xl text-indigo-300">h</span>
+                      <span className="text-5xl font-extrabold ml-2">{hoursStats.totalMinsRemainder}</span><span className="text-xl text-indigo-300">m</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Círculos decorativos de fundo */}
+              <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white opacity-5 rounded-full blur-2xl"></div>
+              <div className="absolute bottom-0 right-40 -mb-10 w-32 h-32 bg-indigo-500 opacity-20 rounded-full blur-2xl"></div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+              <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
+                <BarChart3 className="w-5 h-5 text-indigo-500" /> Desempenho por Semana Finalizada
+              </h3>
+              
+              {hoursStats.weeklyData.length === 0 ? (
+                <div className="text-center py-8">
+                  <Timer className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                  <p className="text-slate-500">Ainda não há semanas finalizadas com registo de horas.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {hoursStats.weeklyData.map((week, index) => {
+                    // Calcula a largura da barra em relação à semana com mais horas
+                    const maxMinutes = Math.max(...hoursStats.weeklyData.map(w => w.minutes));
+                    const widthPercent = maxMinutes > 0 ? (week.minutes / maxMinutes) * 100 : 0;
+                    
+                    return (
+                      <div key={week.id || index} className="flex flex-col sm:flex-row sm:items-center gap-3">
+                        <div className="w-full sm:w-48 shrink-0">
+                          <p className="font-bold text-slate-700 truncate">{week.name}</p>
+                          <p className="text-xs text-slate-400 truncate">{week.label}</p>
+                        </div>
+                        <div className="flex-1 flex items-center gap-4">
+                          <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
+                              style={{ width: `${widthPercent}%` }}
+                            ></div>
+                          </div>
+                          <div className="w-20 text-right font-bold text-slate-600 text-sm">
+                            {week.hoursStr}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* --- ABA: HISTÓRICO DE SEMANAS --- */}
         {activeTab === 'historico' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1027,6 +1178,14 @@ export default function App() {
                       const groupedData = groupScheduleBySubject(week.schedule);
                       const hasContent = Object.keys(groupedData).length > 0;
                       
+                      // Conta as horas desta semana salva
+                      let weekMins = 0;
+                      if (week.weekHours) {
+                          Object.values(week.weekHours).forEach(day => {
+                              weekMins += (day.h || 0) * 60 + (day.m || 0);
+                          });
+                      }
+                      
                       return (
                         <div key={week.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
                           <div className="bg-slate-50 border-b border-slate-200 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1035,7 +1194,7 @@ export default function App() {
                                 <Archive className="w-5 h-5 text-indigo-500" />
                                 {week.name}
                               </h3>
-                              <div className="text-sm text-slate-500 flex items-center gap-2 mt-1">
+                              <div className="text-sm text-slate-500 flex items-center gap-2 mt-1 flex-wrap">
                                 {week.weekInfo ? (
                                   <span className="font-medium text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">
                                     Semana {week.weekInfo.weekNum} de {MESES[week.weekInfo.month]} ({week.weekInfo.label})
@@ -1044,6 +1203,11 @@ export default function App() {
                                   <span className="font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded">Semana sem data</span>
                                 )}
                                 <span className="text-xs">Finalizado em: {week.dateSaved}</span>
+                                {weekMins > 0 && (
+                                  <span className="font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded ml-2 flex items-center gap-1 border border-indigo-100">
+                                    <Timer className="w-3 h-3" /> {Math.floor(weekMins/60)}h {weekMins%60}m estudados
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
